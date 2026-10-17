@@ -95,6 +95,9 @@ public sealed class LiveQuickBooksTests
         Assert.True(failures.Count == 0, $"{failures.Count} of {total} failed:{Environment.NewLine}{string.Join(Environment.NewLine, failures)}");
     }
 
+    // Payroll lists are behind their own opt-in, so a default server rightly refuses them.
+    private static bool IsPayroll(Entity e) => e.Name.StartsWith("PayrollItem", StringComparison.Ordinal);
+
     // Tools that need arguments, with the calls that cover them. Everything else is called with no arguments.
     private static readonly Dictionary<string, object[]> Calls = new()
     {
@@ -103,21 +106,23 @@ public sealed class LiveQuickBooksTests
         ["get_changes_since"] = [new { since = "2000-01-01", entities = new[] { "Customer", "Vendor", "Item", "Invoice", "Bill" } }],
         ["get_deleted_records"] = [new { kind = "list", since = "2000-01-01" }, new { kind = "transaction", since = "2000-01-01" }],
         ["search_setup_lists"] = [.. new[] { "Class", "Currency", "StandardTerms", "DateDrivenTerms", "PaymentMethod", "ShipMethod", "CustomerMsg", "SalesTaxCode", "SalesRep", "Template", "UnitOfMeasureSet", "Vehicle", "BillingRate", "PriceLevel", "WorkersCompCode", "CustomerType", "VendorType", "JobType" }.Select(l => (object)new { list = l })],
-        ["query_records"] = [.. Entity.All.Select(e => (object)new { entity = e.Name, maxResults = 5 })],
-        ["get_report"] = [.. ReportKind.All.SelectMany(k => k.Types).Select(t => (object)new { reportType = t, dateMacro = "ThisFiscalYear" })],
+        ["query_records"] = [.. Entity.All.Where(e => !IsPayroll(e)).Select(e => (object)new { entity = e.Name, maxResults = 5 })],
+        ["get_report"] = [.. ReportKind.All.SelectMany(k => k.Types.Select(t => k.Request == "BudgetSummaryReportQueryRq"
+            ? (object)new { reportType = t, fiscalYear = DateTime.Today.Year }
+            : new { reportType = t, dateMacro = "ThisYearToDate" }))],
         ["get_aged_receivables"] = [new { }, new { detail = true }],
         ["get_aged_payables"] = [new { }, new { detail = true }],
-        ["get_profit_and_loss"] = [new { dateMacro = "ThisFiscalYear" }, new { dateMacro = "ThisFiscalYear", summarizeColumnsBy = "Month" }],
-        ["get_balance_sheet"] = [new { dateMacro = "ThisFiscalYear" }],
-        ["get_trial_balance"] = [new { dateMacro = "ThisFiscalYear" }],
+        ["get_profit_and_loss"] = [new { dateMacro = "ThisYearToDate" }, new { dateMacro = "ThisYearToDate", summarizeColumnsBy = "Month" }],
+        ["get_balance_sheet"] = [new { dateMacro = "ThisYearToDate" }],
+        ["get_trial_balance"] = [new { dateMacro = "ThisYearToDate" }],
         ["get_general_ledger"] = [new { dateMacro = "ThisMonth" }],
         ["search_customers"] = [new { maxResults = 5 }, new { maxResults = 5, active = "all" }],
         ["search_vendors"] = [new { maxResults = 5 }],
         ["search_employees"] = [new { maxResults = 5 }],
         ["search_items"] = [new { maxResults = 5 }, new { maxResults = 5, itemType = "Service" }, new { maxResults = 5, itemType = "Inventory" }],
         ["search_names"] = [new { maxResults = 5 }],
-        ["search_sales_transactions"] = [new { maxResults = 5 }],
-        ["search_purchase_transactions"] = [new { maxResults = 5 }],
+        ["search_sales_transactions"] = [.. new[] { "Invoice", "SalesReceipt", "CreditMemo", "Estimate", "SalesOrder", "ReceivePayment", "ARRefundCreditCard", "Charge", "Deposit" }.Select(t => (object)new { type = t, maxResults = 5 })],
+        ["search_purchase_transactions"] = [.. new[] { "Bill", "BillPaymentCheck", "BillPaymentCreditCard", "PurchaseOrder", "ItemReceipt", "VendorCredit", "Check", "CreditCardCharge", "CreditCardCredit", "SalesTaxPaymentCheck", "Transfer", "JournalEntry" }.Select(t => (object)new { type = t, maxResults = 5 })],
         ["search_transactions"] = [new { maxResults = 5, dateFrom = "2000-01-01" }],
     };
 
@@ -139,7 +144,8 @@ public sealed class LiveQuickBooksTests
             {
                 total++;
                 var (ok, text) = await CallAsync(session.Client, tool.Name, args);
-                if (!ok) failures.Add($"{tool.Name} {JsonSerializer.Serialize(args)} -> {Short(text)}");
+                // 3250: the company file does not use that feature (multi-currency, multiple inventory sites), which is not a defect.
+                if (!ok && !text.Contains("(code 3250)", StringComparison.Ordinal)) failures.Add($"{tool.Name} {JsonSerializer.Serialize(args)} -> {Short(text)}");
             }
         }
 
@@ -151,7 +157,7 @@ public sealed class LiveQuickBooksTests
     public async Task Every_entity_and_report_in_the_catalog_is_covered_by_a_tool_call()
     {
         // A new entity or report type is queried automatically; this guards the call table above against going stale.
-        Assert.Equal(Entity.All.Count, Calls["query_records"].Length);
+        Assert.Equal(Entity.All.Count(e => !IsPayroll(e)), Calls["query_records"].Length);
         Assert.Equal(ReportKind.All.Sum(k => k.Types.Count), Calls["get_report"].Length);
         await using var session = await StartAsync();
         var read = (await session.Client.ListToolsAsync()).Where(t => t.ProtocolTool.Annotations?.ReadOnlyHint == true).Select(t => t.Name);

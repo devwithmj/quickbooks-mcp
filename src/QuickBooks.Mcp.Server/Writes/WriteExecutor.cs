@@ -14,13 +14,22 @@ namespace QuickBooks.Mcp.Server.Writes;
 /// <param name="Entity">The entity being changed, for the allowlist and the audit log, e.g. "Customer".</param>
 /// <param name="Request">The request element name, e.g. <c>CustomerAddRq</c>.</param>
 /// <param name="Children">The request's child elements.</param>
-public sealed record WriteCall(WriteOp Op, string Entity, string Request, IReadOnlyList<XElement> Children);
+/// <param name="Needs">Fields used that first appeared in a later qbXML version, checked against the installed QuickBooks.</param>
+public sealed record WriteCall(
+    WriteOp Op, string Entity, string Request, IReadOnlyList<XElement> Children, IReadOnlyList<(string Path, string Since)>? Needs = null);
 
 /// <summary>
 /// The single path every write tool takes: gate check, optional dry run, a two-step confirmation
 /// for deletes and voids, the call itself, and the audit entry.
 /// </summary>
-public sealed class WriteExecutor(IQbClient qb, WriteGate gate, AuditLog audit, IdempotencyStore? idempotency = null, TimeProvider? time = null)
+public sealed class WriteExecutor(
+    IQbClient qb,
+    WriteGate gate,
+    AuditLog audit,
+    IdempotencyStore? idempotency = null,
+    TimeProvider? time = null,
+    IUserConfirmation? confirmation = null,
+    bool confirmAllWrites = false)
 {
     private static readonly TimeSpan TokenLifetime = TimeSpan.FromMinutes(5);
     private readonly ConcurrentDictionary<string, (string Hash, DateTimeOffset Expires)> _tokens = new();
@@ -44,24 +53,39 @@ public sealed class WriteExecutor(IQbClient qb, WriteGate gate, AuditLog audit, 
         if (dryRun)
             return new JsonObject { ["dry_run"] = true, ["request"] = preview }.ToJsonString();
 
-        if (call.Op == WriteOp.Delete)
+        // Deletes and voids always need a human yes; creates and updates only when the server is set to ask.
+        if (call.Op == WriteOp.Delete || confirmAllWrites)
         {
-            if (confirmationToken is null)
+            var answer = confirmation is null
+                ? Confirmation.Unavailable
+                : await confirmation.AskAsync(Summary(call, preview), cancellationToken);
+
+            if (answer == Confirmation.Declined)
             {
-                var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-                _tokens[token] = (hash, Now() + TokenLifetime);
-                audit.Append("previewed", call.Op, call.Entity, hash, []);
-                return new JsonObject
-                {
-                    ["confirmation_required"] = true,
-                    ["request"] = preview,
-                    ["confirmation_token"] = token,
-                    ["message"] = "Nothing was changed. Show this to the user and, if they agree, call again with confirmation_token.",
-                }.ToJsonString();
+                audit.Append("declined", call.Op, call.Entity, hash, []);
+                throw new McpException("The user declined this change. Nothing was changed.");
             }
 
-            if (!_tokens.TryRemove(confirmationToken, out var issued) || issued.Hash != hash || issued.Expires < Now())
-                throw new McpException("The confirmation token is invalid, expired or for a different request. Request a new preview.");
+            // No way to ask in the client: fall back to the preview-and-token flow.
+            if (answer == Confirmation.Unavailable)
+            {
+                if (confirmationToken is null)
+                {
+                    var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+                    _tokens[token] = (hash, Now() + TokenLifetime);
+                    audit.Append("previewed", call.Op, call.Entity, hash, []);
+                    return new JsonObject
+                    {
+                        ["confirmation_required"] = true,
+                        ["request"] = preview,
+                        ["confirmation_token"] = token,
+                        ["message"] = "Nothing was changed. Show this to the user and, if they agree, call again with confirmation_token.",
+                    }.ToJsonString();
+                }
+
+                if (!_tokens.TryRemove(confirmationToken, out var issued) || issued.Hash != hash || issued.Expires < Now())
+                    throw new McpException("The confirmation token is invalid, expired or for a different request. Request a new preview.");
+            }
         }
 
         if (idempotencyKey is not null && idempotency is not null && call.Op == WriteOp.Create
@@ -73,7 +97,12 @@ public sealed class WriteExecutor(IQbClient qb, WriteGate gate, AuditLog audit, 
 
         try
         {
-            var reply = await qb.SendAsync(v => QbXmlRequest.Build(v, call.Request, call.Children), cancellationToken);
+            var reply = await qb.SendAsync(v =>
+            {
+                QbVersions.EnsureRequest(call.Request, v);
+                QbVersions.EnsureFields(call.Needs ?? [], v);
+                return QbXmlRequest.Build(v, call.Request, call.Children);
+            }, cancellationToken);
             var response = QbXmlResponse.Parse(reply);
             var ids = response.Records.Select(r => (string?)r.Element("ListID") ?? (string?)r.Element("TxnID")).OfType<string>().ToList();
             audit.Append("ok", call.Op, call.Entity, hash, ids);
@@ -87,4 +116,7 @@ public sealed class WriteExecutor(IQbClient qb, WriteGate gate, AuditLog audit, 
             throw;
         }
     }
+
+    private static string Summary(WriteCall call, string preview) =>
+        $"{call.Op} {call.Entity} in QuickBooks?\n\nThis is the request that will be sent:\n{(preview.Length > 1500 ? preview[..1500] + " ..." : preview)}";
 }

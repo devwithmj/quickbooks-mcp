@@ -22,6 +22,22 @@ Open-source [MCP](https://modelcontextprotocol.io) server that connects **QuickB
 
 Then allow access once in QuickBooks (`--authorize`) and add the server to your AI app. Step by step: **[docs/GUIDE.md](docs/GUIDE.md)**.
 
+## QuickBooks Online or Desktop?
+
+This project is for **QuickBooks Desktop**. If you use **QuickBooks Online**, use Intuit's own server: [intuit/quickbooks-online-mcp-server](https://github.com/intuit/quickbooks-online-mcp-server) (Apache-2.0). We read its design for ideas and wrote our own code; no code was copied.
+
+| | QuickBooks Online server (Intuit) | This project (Desktop) |
+|---|---|---|
+| Targets | QuickBooks Online | QuickBooks Desktop Pro, Premier, Enterprise (Windows) |
+| Where it runs | Talks to Intuit's cloud API | On your PC, next to QuickBooks, through its local SDK |
+| Setup and sign-in | An Intuit developer app and OAuth | A one-time "allow this app" approval inside QuickBooks (`--authorize`); no developer account |
+| Only on Desktop | | Inventory assemblies and sites, price levels, workers comp codes, custom fields via data extensions, opening a record in the QuickBooks window |
+| Only on Online | Attachments, invoice PDFs and other cloud features | |
+| Safety default | See that project | Read-only until you enable writes; deletes and voids need your approval; sensitive numbers masked; payroll off; audit log |
+| Data path | Through Intuit's cloud | Stays on your computer except what the assistant is shown |
+
+The two do not share a company file or an account: a business on Online should not use this project, and a Desktop business cannot use Intuit's.
+
 ## Requirements
 
 - Windows with QuickBooks Desktop installed and licensed.
@@ -33,8 +49,10 @@ Not for QuickBooks Online (Intuit has its own MCP server), QuickBooks for Mac (n
 
 - [User guide](docs/GUIDE.md): install, authorize, connect clients, troubleshoot, FAQ
 - [Tools](docs/TOOLS.md): every tool, parameter and example
-- [Writes](docs/WRITES.md) and [Reports](docs/REPORTS.md)
+- [Prompt cookbook](docs/COOKBOOK.md), [Writes](docs/WRITES.md) and [Reports](docs/REPORTS.md)
 - [Scope and non-goals](docs/SCOPE.md) and [security model](docs/SECURITY-MODEL.md)
+- [Roadmap](docs/ROADMAP.md) and [1.0 checklist](docs/RELEASE-1.0.md)
+- [Support, upgrades and uninstall](docs/SUPPORT.md), [Compatibility](docs/COMPATIBILITY.md), [Performance](docs/PERFORMANCE.md)
 - [Releasing](docs/RELEASING.md), [Testing](docs/TESTING.md), [Contributing](CONTRIBUTING.md)
 
 ## Legal

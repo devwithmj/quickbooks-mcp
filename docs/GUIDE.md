@@ -87,10 +87,11 @@ Everything is read-only until you opt in. In the same `env` (or as arguments):
 | `QB_ALLOW_WRITES=true` / `--allow-writes` | enable create, update, delete and void |
 | `QB_ENABLE_WRITE`, `QB_ENABLE_UPDATE`, `QB_ENABLE_DELETE` | enable one kind only |
 | `QB_WRITE_ALLOW=Invoice,Customer` | limit which record types can change |
+| `QB_CONFIRM_WRITES=true` | also ask you to approve every create and update (deletes and voids are always confirmed) |
 | `QB_ALLOW_PAYROLL=true` | allow payroll data and reports |
 | `QB_REDACT=false` | stop masking tax IDs and bank and card numbers (not recommended) |
 
-Changes support a preview (`dryRun`), deletes and voids need a confirmation step, and everything is logged to `%LOCALAPPDATA%\quickbooks-mcp\audit.jsonl`. Details: [WRITES.md](WRITES.md). Other settings: `QB_MODE` (`single`, `multi` or `any`), `QB_TIMEOUT_SECONDS`, `QB_MAX_RETRIES`, `QB_LOG_LEVEL`, `QB_CONFIG` (a JSON file with the same names in lowercase). Command-line flags beat environment variables, which beat the file.
+Changes support a preview (`dryRun`), deletes and voids need a confirmation step, and everything is logged to `%LOCALAPPDATA%\quickbooks-mcp\audit.jsonl`. Details: [WRITES.md](WRITES.md). Other settings: `QB_MODE` (`single`, `multi` or `any`), `QB_TIMEOUT_SECONDS`, `QB_MAX_RETRIES`, `QB_CACHE_SECONDS` (see [PERFORMANCE.md](PERFORMANCE.md)), `QB_LOG_LEVEL`, `QB_CONFIG` (a JSON file with the same names in lowercase). Command-line flags beat environment variables, which beat the file.
 
 ## 6. Troubleshooting
 
@@ -106,7 +107,7 @@ Run `quickbooks-mcp.exe --doctor` (or `npx -y @devwithmj/quickbooks-mcp --doctor
 | "could not be started" / timeouts | QuickBooks is closed, busy updating or very slow | Open QuickBooks and the file; raise `QB_TIMEOUT_SECONDS` |
 | Company file `NOT FOUND` | Wrong path in `QB_COMPANY_FILE` | Use the full path including `.qbw` |
 
-QuickBooks and the server must run at the same Windows privilege level. If QuickBooks runs "as administrator", start the AI app as administrator too.
+QuickBooks and the server must run at the same Windows privilege level. `--doctor` has a "Run as admin" line and warns about a mismatch. If QuickBooks runs "as administrator", start the AI app as administrator too (or the reverse).
 
 ## 7. FAQ
 
@@ -123,3 +124,17 @@ QuickBooks and the server must run at the same Windows privilege level. If Quick
 **Where is my data sent?** Only to the AI app you connected, as tool results. The server has no telemetry and makes no network calls (the npx launcher downloads the release once).
 
 **How do I undo a change?** Look in the audit log for the record IDs, and fix them in QuickBooks (a voided transaction stays visible at zero). There is no automatic rollback; that is why changes are off by default.
+
+## 8. Logs and bug reports
+
+- **Logs** go to stderr (your AI app usually shows them in its MCP log view). Set `QB_LOG_LEVEL` (`Trace` ... `Critical`) and optionally `QB_LOG_FILE` to also write to a file. Logs say which request ran, how long it took and whether it worked, with QuickBooks error codes. They never contain the request or reply, so no company data, names or amounts. Detailed error text appears only at `Debug` level.
+- **Bug reports:** run `--diagnostics` and paste the output. It has versions, your settings (the company file by name only), and the `--doctor` checks. It contains no company data.
+- **No telemetry.** Nothing is sent anywhere unless a future version asks you to opt in first.
+
+## 9. Multi-currency and older company files
+
+In a multi-currency company, each transaction carries its own currency (`CurrencyRef`) and exchange rate. Any search result that contains a foreign-currency record gets a `currency` block naming the home currency and how to read amounts: amounts on a record are in that record's currency, fields ending in `InHomeCurrency` are in the home currency, and reports are always in the home currency. Single-currency companies get no such block (and no extra request). Company files created in older QuickBooks years work as long as the installed QuickBooks can open them; features newer than that QuickBooks are refused with a message (see [COMPATIBILITY.md](COMPATIBILITY.md)).
+
+## 10. More than one company file
+
+Add one server entry per file, each with its own `QB_COMPANY_FILE` (and its own switches, so one can stay read-only). Calls to QuickBooks from all of them queue, because QuickBooks has only one file open at a time. A call for a file fails if someone has a different file open in the QuickBooks window; close it or switch to the file first. The reasoning is in [design/multiple-company-files.md](design/multiple-company-files.md).

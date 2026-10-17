@@ -16,7 +16,7 @@ jobs:
       matrix:
         rid: [win-x64, win-x86]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -29,10 +29,10 @@ jobs:
           dotnet publish src/QuickBooks.Mcp.Server -c Release -r ${{ matrix.rid }} -p:Version="$version" -o out
           cp out/quickbooks-mcp.exe "quickbooks-mcp-${{ matrix.rid }}.exe"
           sha256sum "quickbooks-mcp-${{ matrix.rid }}.exe" > "quickbooks-mcp-${{ matrix.rid }}.exe.sha256"
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: quickbooks-mcp-${{ matrix.rid }}.exe
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.rid }}
           path: quickbooks-mcp-${{ matrix.rid }}.exe*
@@ -41,7 +41,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Release notes from Conventional Commits
@@ -51,7 +51,7 @@ jobs:
           args: --latest --strip header
         env:
           OUTPUT: RELEASE_NOTES.md
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -91,7 +91,7 @@ jobs:
     needs: release
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -112,8 +112,8 @@ jobs:
       matrix:
         rid: [win-x64, win-x86]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.rid }}
           path: dist
@@ -140,7 +140,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build server.json for this release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -171,7 +171,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x

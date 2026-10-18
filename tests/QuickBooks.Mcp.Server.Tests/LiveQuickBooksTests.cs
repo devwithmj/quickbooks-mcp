@@ -380,6 +380,7 @@ public sealed class LiveQuickBooksTests
     [LiveWriteFact]
     public async Task One_customer_can_be_merged_into_another()
     {
+        // QuickBooks refuses list merges (code 3500) unless the company file is open in single-user mode.
         await using var session = await StartAsync("--allow-writes");
         var client = session.Client;
         var stamp = Guid.NewGuid().ToString("N")[..12];

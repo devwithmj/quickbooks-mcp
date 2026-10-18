@@ -498,7 +498,7 @@ Needs: `--allow-writes or QB_ENABLE_UPDATE`. Example: *"Change Acme's phone numb
 
 ### `merge_records`
 
-Merge a list item into another of the same type; the first is deleted and its transactions move to the second. The user is asked to approve; If the client cannot ask the user, the first call returns a preview and a confirmation_token to pass on a second call.
+Merge a list item into another of the same type; the first is deleted and its transactions move to the second; QuickBooks must be in single-user mode. The user is asked to approve; If the client cannot ask the user, the first call returns a preview and a confirmation_token to pass on a second call.
 
 Needs: `--allow-writes or QB_ENABLE_DELETE`. Example: *"Merge the duplicate customer Acme Inc into Acme."*
 

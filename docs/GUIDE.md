@@ -71,9 +71,9 @@ claude mcp add quickbooks -e QB_COMPANY_FILE="C:\Books\Company.qbw" -- npx -y @d
 
 ```toml
 [mcp_servers.quickbooks]
-command = "C:\Tools\quickbooks-mcp.exe"
+command = 'C:\Tools\quickbooks-mcp.exe'
 args = []
-env = { QB_COMPANY_FILE = "C:\Books\Company.qbw" }
+env = { QB_COMPANY_FILE = 'C:\Books\Company.qbw' }
 ```
 
 Or from a terminal: `codex mcp add quickbooks --env QB_COMPANY_FILE="C:\Books\Company.qbw" -- C:\Tools\quickbooks-mcp.exe`. Add `"--allow-writes"` to `args` only if you want changes. The ChatGPT website cannot run local servers; see [REMOTE-ACCESS.md](REMOTE-ACCESS.md) for a private link.
